@@ -4,7 +4,7 @@ import CoreLocation
 import CoreMotion
 import simd
 
-public class SwiftFlutterCompassPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, CLLocationManagerDelegate {
+public final class SwiftFlutterCompassPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, CLLocationManagerDelegate {
 
     private var eventSink: FlutterEventSink?;
     private var location: CLLocationManager = CLLocationManager();
@@ -13,12 +13,10 @@ public class SwiftFlutterCompassPlugin: NSObject, FlutterPlugin, FlutterStreamHa
 
     init(channel: FlutterEventChannel) {
         super.init()
-        location.delegate = self
-        location.headingFilter = 0.1;
+        location.headingFilter = 5;
         channel.setStreamHandler(self);
 
-        motion.deviceMotionUpdateInterval = 1.0 / 30.0;
-        motion.startDeviceMotionUpdates(using: CMAttitudeReferenceFrame.xMagneticNorthZVertical);
+        motion.deviceMotionUpdateInterval = 1.0 / 3.0;
     }
 
 
@@ -30,19 +28,23 @@ public class SwiftFlutterCompassPlugin: NSObject, FlutterPlugin, FlutterStreamHa
     public func onListen(withArguments arguments: Any?,
                          eventSink: @escaping FlutterEventSink) -> FlutterError? {
         self.eventSink = eventSink;
+        location.delegate = self
         location.startUpdatingHeading();
+        motion.startDeviceMotionUpdates(using: CMAttitudeReferenceFrame.xMagneticNorthZVertical);
         return nil;
     }
 
     public func onCancel(withArguments arguments: Any?) -> FlutterError? {
         eventSink = nil;
+        location.delegate = nil
         location.stopUpdatingHeading();
+        motion.stopDeviceMotionUpdates();
         return nil;
     }
 
     public func locationManager(_ manager: CLLocationManager, didUpdateHeading newHeading: CLHeading) {
         if (newHeading.headingAccuracy>0){
-            var headingForCameraMode = newHeading.trueHeading;
+            var headingForCameraMode = newHeading.magneticHeading;
             // If device orientation data is available, use it to calculate the heading out the the
             // back of the device (rather than out the top of the device).
             if let data = self.motion.deviceMotion?.attitude {
@@ -69,7 +71,7 @@ public class SwiftFlutterCompassPlugin: NSObject, FlutterPlugin, FlutterStreamHa
                 let yaw = atan2(T[0, 1], T[1, 1]) + Double.pi / 2;
                 headingForCameraMode = (yaw + Double.pi * 2).truncatingRemainder(dividingBy: Double.pi * 2) * 180.0 / Double.pi;
             }
-            eventSink?([newHeading.trueHeading, headingForCameraMode, newHeading.headingAccuracy]);
+            eventSink?([newHeading.magneticHeading, headingForCameraMode, newHeading.headingAccuracy]);
         }
     }
 }
