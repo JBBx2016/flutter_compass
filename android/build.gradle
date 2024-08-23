@@ -4,30 +4,32 @@ version '1.0-SNAPSHOT'
 buildscript {
     repositories {
         google()
-        jcenter()
+        mavenCentral()
     }
 
     dependencies {
-        classpath 'com.android.tools.build:gradle:4.1.1'
+        classpath("com.android.tools.build:gradle:8.2.2")
     }
 }
 
-rootProject.allprojects {
+allprojects {
     repositories {
         google()
-        jcenter()
+        mavenCentral()
     }
 }
 
-apply plugin: 'com.android.library'
+apply plugin: "com.android.library"
 
 android {
-    compileSdkVersion 30
+    namespace = "com.hemanthraj.fluttercompass"
+
+    compileSdk = 34
 
     defaultConfig {
-        minSdkVersion 20
-        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        minSdk = 21
     }
+
     lintOptions {
         disable 'InvalidPackage'
     }
