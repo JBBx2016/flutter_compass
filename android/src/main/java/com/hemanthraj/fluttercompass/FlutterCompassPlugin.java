@@ -36,6 +36,7 @@ public final class FlutterCompassPlugin implements FlutterPlugin, StreamHandler 
     private static final int COMPASS_UPDATE_RATE_MS = 32;
 
     private SensorEventListener sensorEventListener;
+    private EventChannel channel;
 
     private Display display;
     private SensorManager sensorManager;
@@ -61,10 +62,11 @@ public final class FlutterCompassPlugin implements FlutterPlugin, StreamHandler 
         // no-op
     }
 
-    private FlutterCompassPlugin(Context context) {
+    private void getSensors(Context context) {
         display = ((DisplayManager) context.getSystemService(Context.DISPLAY_SERVICE))
                 .getDisplay(Display.DEFAULT_DISPLAY);
         sensorManager = (SensorManager) context.getSystemService(Context.SENSOR_SERVICE);
+        if (sensorManager == null) return;
         compassSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR);
         if (compassSensor == null) {
             Log.d(TAG, "Rotation vector sensor not supported on device, "
@@ -79,33 +81,52 @@ public final class FlutterCompassPlugin implements FlutterPlugin, StreamHandler 
 
     @Override
     public void onAttachedToEngine(@NonNull FlutterPluginBinding binding) {
-        EventChannel channel = new EventChannel(binding.getBinaryMessenger(), "hemanthraj/flutter_compass");
-        channel.setStreamHandler(new FlutterCompassPlugin(binding.getApplicationContext()));
+        channel = new EventChannel(binding.getBinaryMessenger(), "hemanthraj/flutter_compass");
+        getSensors(binding.getApplicationContext());
+        channel.setStreamHandler(this);
     }
 
     @Override
     public void onDetachedFromEngine(@NonNull FlutterPluginBinding binding) {
+        onCancel(null);
+        if (channel != null) channel.setStreamHandler(null);
+        channel = null;
+        sensorManager = null;
+        display = null;
+        compassSensor = null;
+        gravitySensor = null;
+        magneticFieldSensor = null;
     }
 
     public void onListen(Object arguments, EventSink events) {
+        onCancel(null);
+        if (sensorManager == null || display == null ||
+                (!isCompassSensorAvailable() && (gravitySensor == null || magneticFieldSensor == null))) {
+            // Preserve the documented null-heading contract on devices without a compass.
+            events.success(null);
+            return;
+        }
+        rotationVectorValue = null;
+        gravityValues = new float[3];
+        magneticValues = new float[3];
+        compassUpdateNextTimestamp = 0;
+        lastAccuracySensorStatus = SensorManager.SENSOR_STATUS_UNRELIABLE;
         sensorEventListener = createSensorEventListener(events);
 
         if (isCompassSensorAvailable()) {
             // Does nothing if the sensors already registered.
             sensorManager.registerListener(sensorEventListener, compassSensor, SENSOR_DELAY_MICROS);
+        } else {
+            sensorManager.registerListener(sensorEventListener, gravitySensor, SENSOR_DELAY_MICROS);
+            sensorManager.registerListener(sensorEventListener, magneticFieldSensor, SENSOR_DELAY_MICROS);
         }
-
-        sensorManager.registerListener(sensorEventListener, gravitySensor, SENSOR_DELAY_MICROS);
-        sensorManager.registerListener(sensorEventListener, magneticFieldSensor, SENSOR_DELAY_MICROS);
     }
 
     public void onCancel(Object arguments) {
-        if (isCompassSensorAvailable()) {
-            sensorManager.unregisterListener(sensorEventListener, compassSensor);
+        if (sensorManager != null && sensorEventListener != null) {
+            sensorManager.unregisterListener(sensorEventListener);
         }
-
-        sensorManager.unregisterListener(sensorEventListener, gravitySensor);
-        sensorManager.unregisterListener(sensorEventListener, magneticFieldSensor);
+        sensorEventListener = null;
     }
 
     private boolean isCompassSensorAvailable() {
@@ -116,6 +137,7 @@ public final class FlutterCompassPlugin implements FlutterPlugin, StreamHandler 
         return new SensorEventListener() {
             @Override
             public void onSensorChanged(SensorEvent event) {
+                if (sensorEventListener != this) return;
                 if (lastAccuracySensorStatus == SensorManager.SENSOR_STATUS_UNRELIABLE) {
                     Log.d(TAG, "Compass sensor is unreliable, device calibration is needed.");
                     // Update the heading, even if the sensor is unreliable.
@@ -153,7 +175,9 @@ public final class FlutterCompassPlugin implements FlutterPlugin, StreamHandler 
                     SensorManager.getRotationMatrixFromVector(rotationMatrix, rotationVectorValue);
                 } else {
                     // Get rotation matrix given the gravity and geomagnetic matrices
-                    SensorManager.getRotationMatrix(rotationMatrix, null, gravityValues, magneticValues);
+                    if (!SensorManager.getRotationMatrix(rotationMatrix, null, gravityValues, magneticValues)) {
+                        return;
+                    }
                 }
 
                 int worldAxisForDeviceAxisX;

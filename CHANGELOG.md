@@ -118,3 +118,12 @@ Older versions used True heading and which caused deviations.
 ## 0.0.1
 
 * flutter compass plugin
+# 0.8.2 (fork)
+
+- Modernize for Dart 3, Flutter 3.44+, AGP 9.1 and Gradle 9.3.1.
+- Add Swift Package Manager support alongside CocoaPods, sharing the unchanged
+  fork Swift implementation and its subscription-driven motion lifecycle.
+- Release Android sensors on engine detach, emit the documented no-sensor event,
+  and register fallback sensors only when required.
+- Modernize the example and add Dart, Android lifecycle, widget and device tests.
+- Preserve existing heading ranges, magnetic-north behavior and public Dart API.

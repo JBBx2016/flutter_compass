@@ -29,6 +29,10 @@ fastlane/report.xml
 **/doc/api/
 .dart_tool/
 .flutter-plugins
+.flutter-plugins-dependencies
+.fvm/
+**/ios/Flutter/ephemeral/
+**/ios/Flutter/flutter_export_environment.sh
 .packages
 .pub-cache/
 .pub/

@@ -1,30 +1,62 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_compass/flutter_compass.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-void main() => runApp(MyApp());
+void main() => runApp(const MyApp());
 
 class MyApp extends StatefulWidget {
-  const MyApp({
-    Key? key,
-  }) : super(key: key);
+  const MyApp({super.key});
 
   @override
-  _MyAppState createState() => _MyAppState();
+  State<MyApp> createState() => _MyAppState();
 }
 
-class _MyAppState extends State<MyApp> {
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   bool _hasPermissions = false;
+  bool _isResumed = true;
+  final _events = StreamController<CompassEvent>.broadcast();
+  StreamSubscription<CompassEvent>? _compassSubscription;
   CompassEvent? _lastRead;
+  String? _lastReadError;
   DateTime? _lastReadAt;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
 
     _fetchPermissionStatus();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _compassSubscription?.cancel();
+    _events.close();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    setState(() => _isResumed = state == AppLifecycleState.resumed);
+    _updateCompassSubscription();
+    if (_isResumed) _fetchPermissionStatus();
+  }
+
+  void _updateCompassSubscription() {
+    if (_isResumed && _hasPermissions) {
+      _compassSubscription ??= FlutterCompass.events!.listen(
+        _events.add,
+        onError: _events.addError,
+      );
+    } else {
+      // Cancel immediately: the framework may not render another frame while paused.
+      _compassSubscription?.cancel();
+      _compassSubscription = null;
+    }
   }
 
   @override
@@ -32,21 +64,24 @@ class _MyAppState extends State<MyApp> {
     return MaterialApp(
       home: Scaffold(
         backgroundColor: Colors.white,
-        appBar: AppBar(
-          title: const Text('Flutter Compass'),
+        appBar: AppBar(title: const Text('Flutter Compass')),
+        body: Builder(
+          builder: (context) {
+            if (!_isResumed) {
+              return const Center(child: Text('Compass paused'));
+            }
+            if (_hasPermissions) {
+              return Column(
+                children: <Widget>[
+                  _buildManualReader(),
+                  Expanded(child: _buildCompass()),
+                ],
+              );
+            } else {
+              return _buildPermissionSheet();
+            }
+          },
         ),
-        body: Builder(builder: (context) {
-          if (_hasPermissions) {
-            return Column(
-              children: <Widget>[
-                _buildManualReader(),
-                Expanded(child: _buildCompass()),
-              ],
-            );
-          } else {
-            return _buildPermissionSheet();
-          }
-        }),
       ),
     );
   }
@@ -59,11 +94,22 @@ class _MyAppState extends State<MyApp> {
           ElevatedButton(
             child: Text('Read Value'),
             onPressed: () async {
-              final CompassEvent tmp = await FlutterCompass.events!.first;
-              setState(() {
-                _lastRead = tmp;
-                _lastReadAt = DateTime.now();
-              });
+              try {
+                final event = await _events.stream.first.timeout(
+                  const Duration(seconds: 15),
+                );
+                if (!mounted) return;
+                setState(() {
+                  _lastRead = event;
+                  _lastReadAt = DateTime.now();
+                  _lastReadError = null;
+                });
+              } catch (error) {
+                if (!mounted) return;
+                setState(
+                  () => _lastReadError = 'Unable to read heading: $error',
+                );
+              }
             },
           ),
           Expanded(
@@ -73,12 +119,12 @@ class _MyAppState extends State<MyApp> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
                   Text(
-                    '$_lastRead',
-                    style: Theme.of(context).textTheme.caption,
+                    _lastReadError ?? '$_lastRead',
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
                   Text(
                     '$_lastReadAt',
-                    style: Theme.of(context).textTheme.caption,
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
               ),
@@ -91,26 +137,23 @@ class _MyAppState extends State<MyApp> {
 
   Widget _buildCompass() {
     return StreamBuilder<CompassEvent>(
-      stream: FlutterCompass.events,
+      stream: _events.stream,
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return Text('Error reading heading: ${snapshot.error}');
         }
 
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return Center(
-            child: CircularProgressIndicator(),
-          );
+          return Center(child: CircularProgressIndicator());
         }
 
         double? direction = snapshot.data!.heading;
 
         // if direction is null, then device does not support this sensor
         // show error message
-        if (direction == null)
-          return Center(
-            child: Text("Device does not have sensors !"),
-          );
+        if (direction == null) {
+          return Center(child: Text("Device does not have sensors !"));
+        }
 
         return Material(
           shape: CircleBorder(),
@@ -119,9 +162,7 @@ class _MyAppState extends State<MyApp> {
           child: Container(
             padding: EdgeInsets.all(16.0),
             alignment: Alignment.center,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-            ),
+            decoration: BoxDecoration(shape: BoxShape.circle),
             child: Transform.rotate(
               angle: (direction * (math.pi / 180) * -1),
               child: Image.asset('assets/compass.jpg'),
@@ -154,7 +195,7 @@ class _MyAppState extends State<MyApp> {
                 //
               });
             },
-          )
+          ),
         ],
       ),
     );
@@ -164,6 +205,7 @@ class _MyAppState extends State<MyApp> {
     Permission.locationWhenInUse.status.then((status) {
       if (mounted) {
         setState(() => _hasPermissions = status == PermissionStatus.granted);
+        _updateCompassSubscription();
       }
     });
   }

@@ -3,20 +3,18 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'flutter_compass'
-  s.version          = '0.0.1'
+  s.version          = '0.8.2'
   s.summary          = 'A Flutter compass. The heading varies from 0-360, 0 being north.'
   s.description      = <<-DESC
 A Flutter compass. The heading varies from 0-360, 0 being north.
                        DESC
-  s.homepage         = 'http://example.com'
+  s.homepage         = 'https://github.com/JBBx2016/flutter_compass'
   s.license          = { :file => '../LICENSE' }
-  s.author           = { 'Your Company' => 'email@example.com' }
+  s.author           = 'flutter_compass contributors'
   s.source           = { :path => '.' }
-  s.source_files = 'Classes/**/*'
-  s.public_header_files = 'Classes/**/*.h'
+  s.source_files = 'flutter_compass/Sources/flutter_compass/**/*.swift'
   s.dependency 'Flutter'
   
   s.ios.deployment_target = '14.0'
   s.swift_version = '5.7'
 end
-
