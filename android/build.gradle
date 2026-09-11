@@ -8,7 +8,7 @@ buildscript {
     }
 
     dependencies {
-        classpath("com.android.tools.build:gradle:8.2.2")
+        classpath("com.android.tools.build:gradle:9.1.0")
     }
 }
 
@@ -24,13 +24,20 @@ apply plugin: "com.android.library"
 android {
     namespace = "com.hemanthraj.fluttercompass"
 
-    compileSdk = 34
+    compileSdk = 36
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
 
     defaultConfig {
         minSdk = 21
     }
 
-    lintOptions {
-        disable 'InvalidPackage'
-    }
+}
+
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.mockito:mockito-core:5.23.0'
 }
